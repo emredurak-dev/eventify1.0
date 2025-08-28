@@ -1,0 +1,594 @@
+﻿<script>
+    let calendar;
+    let currentEventId = 0;
+    let currentEvent = null;
+
+    $(function () {
+        console.log('=== PAGE LOADED ===');
+        console.log('jQuery version:', $.fn.jquery);
+        console.log('Bootstrap version:', typeof bootstrap !== 'undefined' ? 'Loaded' : 'Not loaded');
+
+        // Check if FullCalendar is available
+        if (typeof FullCalendar === 'undefined') {
+            console.error('FullCalendar is not loaded!');
+            showAlert('FullCalendar kütüphanesi yüklenmedi! Lütfen sayfayı yenileyin.', 'danger');
+            return;
+        }
+
+        console.log('FullCalendar version:', FullCalendar.version);
+        console.log('FullCalendar.Calendar available:', typeof FullCalendar.Calendar);
+
+        initializeCalendar();
+        initializeExternalEvents();
+        setupEventForm();
+    });
+
+    function initializeExternalEvents() {
+        /* initialize the calendar */
+        var containerEl = document.getElementById('external-events');
+        var checkbox = document.getElementById('drop-remove');
+        var calendarEl = document.getElementById('calendar');
+
+        new FullCalendar.Draggable(containerEl, {
+            itemSelector: '.external-event',
+            eventData: function(eventEl) {
+                return {
+                    title: eventEl.innerText,
+                    backgroundColor: getComputedColor(eventEl),
+                    borderColor: getComputedColor(eventEl),
+                    textColor: '#ffffff',
+                };
+            }
+        });
+    }
+
+    function initializeCalendar() {
+        console.log('=== INITIALIZE CALENDAR STARTED ===');
+
+        var calendarEl = document.getElementById('calendar');
+        var checkbox = document.getElementById('drop-remove');
+
+        console.log('Calendar element found:', calendarEl);
+        console.log('Checkbox element found:', checkbox);
+
+        // Check if FullCalendar is loaded
+        if (typeof FullCalendar === 'undefined') {
+            console.error('FullCalendar is not loaded!');
+            showAlert('FullCalendar kütüphanesi yüklenmedi!', 'danger');
+            return;
+        }
+
+        console.log('FullCalendar version:', FullCalendar.version);
+        console.log('FullCalendar.Calendar available:', typeof FullCalendar.Calendar);
+
+        console.log('Creating FullCalendar instance...');
+
+        calendar = new FullCalendar.Calendar(calendarEl, {
+            headerToolbar: {
+                left: 'prev,next today',
+                center: 'title',
+                right: 'dayGridMonth,timeGridWeek,timeGridDay'
+            },
+            themeSystem: 'bootstrap',
+            locale: 'en', // English language support
+            buttonText: {
+                today: 'Today',
+                month: 'Month',
+                week: 'Week',
+                day: 'Day'
+            },
+            initialView: 'dayGridMonth',
+            height: 'auto',
+            firstDay: 1, // Monday
+            weekNumbers: false,
+            navLinks: true,
+            selectable: false,
+            selectMirror: false,
+            dayMaxEvents: true,
+            weekends: true,
+            eventDisplay: 'block', // Eventler blok şeklinde gösterilsin
+            eventTimeFormat: {
+                hour: '2-digit',
+                minute: '2-digit',
+                meridiem: false,
+                hour12: false
+            },
+                            eventDidMount: function(info) {
+                    // Event yüklendiğinde sadece başlığı göster
+                    const eventEl = info.el;
+                    const titleEl = eventEl.querySelector('.fc-event-title');
+                    const timeEl = eventEl.querySelector('.fc-event-time');
+
+                    if (titleEl && timeEl) {
+                        // Sadece başlığı göster, saati gizle
+                        timeEl.style.display = 'none';
+                    }
+                },
+
+            // Load events
+            events: function(info, successCallback, failureCallback) {
+                console.log('Events function called');
+
+                fetch('/Event/GetEvents')
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('Data received:', data);
+
+                        if (data.error) {
+                            console.error('Server error:', data.error);
+                            showAlert('Server error: ' + data.error, 'danger');
+                            successCallback([]);
+                            return;
+                        }
+
+                        if (!Array.isArray(data)) {
+                            console.error('Invalid data format:', data);
+                            successCallback([]);
+                            return;
+                        }
+
+                        if (data.length === 0) {
+                            console.log('No events found');
+                            successCallback([]);
+                            return;
+                        }
+
+                        console.log('Processing', data.length, 'events');
+
+                        const events = data.map(event => ({
+                            id: event.id,
+                            title: event.title,
+                            start: event.start,
+                            end: event.end,
+                            backgroundColor: event.color || '#007bff',
+                            borderColor: event.color || '#007bff',
+                            textColor: '#ffffff',
+                            allDay: event.allDay || false,
+                            extendedProps: {
+                                description: event.description || ''
+                            }
+                        }));
+
+                        console.log('Events processed:', events);
+                        successCallback(events);
+                    })
+                    .catch(error => {
+                        console.error('Fetch error:', error);
+                        showAlert('Error loading data: ' + error.message, 'danger');
+                        failureCallback(error);
+                    });
+            },
+
+            editable: true,
+            droppable: true,
+
+            // Drag and drop
+            drop: function(info) {
+                console.log('Calendar drop event triggered');
+
+                // Get the correct color from the dragged element BEFORE removing it
+                const correctColor = getComputedColor(info.draggedEl);
+                console.log('Correct color from dragged element:', correctColor);
+
+                if (checkbox.checked) {
+                    info.draggedEl.parentNode.removeChild(info.draggedEl);
+                }
+
+                // Create new event from dropped external event
+                const eventData = {
+                    EventId: 0,
+                    Title: info.draggedEl.innerText,
+                    StartDate: info.date,
+                    EndDate: info.date.toISOString().includes('T') ?
+                        new Date(info.date.getTime() + 60 * 60 * 1000) : // Add 1 hour if time is specified
+                        new Date(info.date.getTime() + 24 * 60 * 60 * 1000), // Add 1 day if all-day
+                    Color: correctColor,
+                    Description: '',
+                    IsAllDay: !info.date.toISOString().includes('T')
+                };
+
+                console.log('Event data to be sent:', eventData);
+                console.log('Final color being sent:', eventData.Color);
+
+                // Save to database
+                fetch('/Event/AddEvent', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(eventData)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        console.log('Event saved with color:', eventData.Color);
+
+                        // Find the temporary event that was automatically added by FullCalendar
+                        const tempEvent = calendar.getEvents().find(event =>
+                            event.title === eventData.Title &&
+                            event.start.getTime() === eventData.StartDate.getTime() &&
+                            !event.id // Event without ID is the temporary one
+                        );
+
+                        if (tempEvent) {
+                            // Remove the temporary event immediately
+                            tempEvent.remove();
+                            console.log('Temporary event removed');
+                        }
+
+                        // Now refresh events from database to show the real event with correct color
+                        calendar.refetchEvents();
+                        showAlert('Event created successfully!', 'success');
+                    } else {
+                        showAlert('Error creating event: ' + data.message, 'danger');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error creating event:', error);
+                    showAlert('An error occurred while creating the event!', 'danger');
+                });
+            },
+
+            // Event click
+            eventClick: function(info) {
+                editEvent(info.event);
+            },
+
+            // Event drag and drop
+            eventDrop: function(info) {
+                console.log('Event dropped:', info.event.id, info.event.start, info.event.end);
+                updateEventTime(info.event.id, info.event.start, info.event.end);
+            },
+
+            // Event resize
+            eventResize: function(info) {
+                console.log('Event resized:', info.event.id, info.event.start, info.event.end);
+                updateEventTime(info.event.id, info.event.start, info.event.end);
+            }
+        });
+
+        console.log('Calendar object created, rendering...');
+        calendar.render();
+
+        // Load events after calendar is rendered
+        console.log('Calendar rendered, loading events...');
+        calendar.refetchEvents();
+
+        console.log('=== INITIALIZE CALENDAR COMPLETED ===');
+
+        // Test: Manuel olarak events yüklemeyi deneyelim
+        console.log('=== MANUAL EVENT LOADING TEST ===');
+        setTimeout(() => {
+            console.log('Testing manual event loading...');
+            if (calendar && typeof calendar.refetchEvents === 'function') {
+                console.log('Calling calendar.refetchEvents()...');
+                calendar.refetchEvents();
+            } else {
+                console.error('Calendar or refetchEvents not available');
+            }
+        }, 2000);
+    }
+
+    function setupEventForm() {
+        // Color chooser
+        $('#color-chooser > li > a').click(function (e) {
+            e.preventDefault()
+            var currColor = $(this).css('color')
+            $('#add-new-event').css({
+                'background-color': currColor,
+                'border-color': currColor
+            })
+        })
+
+        // Add new event
+        $('#add-new-event').click(function (e) {
+            e.preventDefault()
+            var val = $('#new-event').val()
+            if (val.length == 0) {
+                return
+            }
+
+            var currColor = $('#add-new-event').css('background-color')
+            var event = $('<div />')
+            event.css({
+                'background-color': currColor,
+                'border-color': currColor,
+                'color': '#fff'
+            }).addClass('external-event')
+            event.text(val)
+            $('#external-events').prepend(event)
+
+            // Add to FullCalendar.Draggable
+            new FullCalendar.Draggable(event[0], {
+                itemSelector: '.external-event',
+                eventData: function(eventEl) {
+                    return {
+                        title: eventEl.innerText,
+                        backgroundColor: getComputedColor(eventEl),
+                        borderColor: getComputedColor(eventEl),
+                        textColor: '#ffffff',
+                    };
+                }
+            });
+
+            // Clear input
+            $('#new-event').val('')
+
+            // Show success message
+            showAlert('Event template created! Now drag it to the calendar to save it.', 'info');
+        });
+
+        // Form submit
+        $('#eventForm').on('submit', function(e) {
+            e.preventDefault();
+            saveEvent();
+        });
+
+        // Modal hidden event - reset form when modal is closed
+        $('#eventModal').on('hidden.bs.modal', function () {
+            closeEventModal();
+        });
+    }
+
+    function editEvent(event) {
+        console.log('=== EDIT EVENT STARTED ===');
+        console.log('Event object received:', event);
+        console.log('Event ID from object:', event.id);
+        console.log('Event ID type:', typeof event.id);
+
+        // Store the event and ID
+        currentEvent = event;
+        currentEventId = event.id;
+
+        console.log('=== AFTER SETTING ===');
+        console.log('Current Event Object set to:', currentEvent);
+        console.log('Current Event ID set to:', currentEventId);
+        console.log('Current Event ID type:', typeof currentEventId);
+        console.log('Current Event ID value:', currentEventId);
+
+        // Set form values
+        $('#eventId').val(event.id);
+        $('#title').val(event.title);
+        $('#startDate').val(formatDateTimeLocal(event.start));
+        $('#endDate').val(formatDateTimeLocal(event.end));
+        $('#description').val(event.extendedProps.description || '');
+        $('#isAllDay').prop('checked', event.allDay);
+
+        // Set color picker value
+        if (event.backgroundColor) {
+            $('#color').val(event.backgroundColor);
+        }
+
+        console.log('=== FORM VALUES SET ===');
+        console.log('Form EventId value:', $('#eventId').val());
+        console.log('Form Title value:', $('#title').val());
+
+        $('#eventModal').modal('show');
+        console.log('=== EDIT EVENT COMPLETED ===');
+    }
+
+    function closeEventModal() {
+        console.log('=== CLOSE MODAL ===');
+        console.log('Before reset - currentEventId:', currentEventId);
+        console.log('Before reset - currentEvent:', currentEvent);
+
+        $('#eventModal').modal('hide');
+        // Reset form
+        $('#eventForm')[0].reset();
+        currentEvent = null;
+        currentEventId = 0;
+
+        console.log('After reset - currentEventId:', currentEventId);
+        console.log('After reset - currentEvent:', currentEvent);
+    }
+
+    function saveEvent() {
+        console.log('=== SAVE EVENT STARTED ===');
+
+        const formData = new FormData(document.getElementById('eventForm'));
+        const eventId = formData.get('EventId');
+
+        console.log('Form EventId:', eventId);
+        console.log('Current Event ID:', currentEventId);
+        console.log('Current Event Object:', currentEvent);
+
+        // Check if we're updating an existing event
+        const isUpdate = currentEventId && currentEventId > 0;
+
+        console.log('Is Update calculated:', isUpdate);
+        console.log('currentEventId type:', typeof currentEventId);
+        console.log('currentEventId value:', currentEventId);
+
+        const eventData = {
+            EventId: isUpdate ? currentEventId : 0,
+            Title: formData.get('Title'),
+            StartDate: formData.get('StartDate'),
+            EndDate: formData.get('EndDate'),
+            Color: formData.get('Color') || '#007bff',
+            Description: formData.get('Description'),
+            IsAllDay: formData.get('IsAllDay') === 'on'
+        };
+
+        console.log('Final event data to send:', eventData);
+        console.log('Final EventId value:', eventData.EventId);
+        console.log('Final Is Update:', isUpdate);
+
+        const url = isUpdate ? '/Event/UpdateEvent' : '/Event/AddEvent';
+        console.log('Using URL:', url);
+
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(eventData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                console.log('=== SAVE SUCCESS ===');
+                console.log('Response data:', data);
+                console.log('Event was updated:', isUpdate);
+
+                $('#eventModal').modal('hide');
+                calendar.refetchEvents();
+                showAlert('Event saved successfully!', 'success');
+                // Reset form after successful save
+                closeEventModal();
+                // Reset current event ID after successful save
+                currentEventId = 0;
+                console.log('Event saved successfully, currentEventId reset to:', currentEventId);
+            } else {
+                console.log('=== SAVE ERROR ===');
+                console.log('Error response:', data);
+                showAlert('Error: ' + data.message, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('An error occurred!', 'danger');
+        });
+    }
+
+    function deleteEvent() {
+        if (!currentEventId) return;
+
+        if (confirm('Are you sure you want to delete this event?')) {
+            fetch('/Event/DeleteEvent', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ id: currentEventId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    $('#eventModal').modal('hide');
+                    calendar.refetchEvents();
+                    showAlert('Event deleted successfully!', 'success');
+                } else {
+                    showAlert('Error: ' + data.message, 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('An error occurred!', 'danger');
+            });
+        }
+    }
+
+    function updateEventTime(eventId, startDate, endDate) {
+        console.log('Updating event time:', eventId, startDate, endDate);
+
+        // Convert dates to proper format for the API
+        const startDateStr = startDate.toISOString();
+        const endDateStr = endDate.toISOString();
+
+        console.log('Formatted dates:', startDateStr, endDateStr);
+
+        fetch('/Event/UpdateEventTime', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                id: eventId,
+                startDate: startDateStr,
+                endDate: endDateStr
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Update response:', data);
+            if (data.success) {
+                showAlert('Event time updated successfully!', 'success');
+            } else {
+                showAlert('Error updating event time: ' + data.message, 'danger');
+                calendar.refetchEvents(); // Revert changes on error
+            }
+        })
+        .catch(error => {
+            console.error('Error updating event time:', error);
+            showAlert('An error occurred while updating event time!', 'danger');
+            calendar.refetchEvents(); // Revert changes on error
+        });
+    }
+
+    function formatDateTimeLocal(date) {
+        const d = new Date(date);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const hours = String(d.getHours()).padStart(2, '0');
+        const minutes = String(d.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+
+    function getComputedColor(element) {
+        console.log('=== GET COMPUTED COLOR ===');
+        console.log('Element:', element);
+        console.log('Element classList:', element.classList);
+
+        // Get the computed background color
+        const bgColor = window.getComputedStyle(element, null).getPropertyValue('background-color');
+
+        console.log('Original background color:', bgColor);
+
+        // Convert CSS color names to hex values
+        const colorMap = {
+            'rgb(40, 167, 69)': '#28a745', // bg-success
+            'rgb(255, 193, 7)': '#ffc107', // bg-warning
+            'rgb(23, 162, 184)': '#17a2b8', // bg-info
+            'rgb(0, 123, 255)': '#007bff', // bg-primary
+            'rgb(220, 53, 69)': '#dc3545', // bg-danger
+            'rgb(108, 117, 125)': '#6c757d' // bg-secondary
+        };
+
+        // Check if it's a mapped color
+        if (colorMap[bgColor]) {
+            console.log('Mapped color found:', colorMap[bgColor]);
+            return colorMap[bgColor];
+        }
+
+        // If it's already a hex color, return as is
+        if (bgColor.startsWith('#')) {
+            console.log('Hex color found:', bgColor);
+            return bgColor;
+        }
+
+        // If it's RGB, convert to hex
+        if (bgColor.startsWith('rgb')) {
+            const rgb = bgColor.match(/\d+/g);
+            if (rgb && rgb.length === 3) {
+                const r = parseInt(rgb[0]);
+                const g = parseInt(rgb[1]);
+                const b = parseInt(rgb[2]);
+                const hexColor = `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+                console.log('RGB converted to hex:', hexColor);
+                return hexColor;
+            }
+        }
+
+        console.log('Using default color: #007bff');
+        // Default fallback
+        return '#007bff';
+    }
+
+    function showAlert(message, type) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+
+        // Find the best container for alerts
+        const container = document.querySelector('.content') || document.querySelector('.container-fluid') || document.body;
+        container.insertBefore(alertDiv, container.firstChild);
+
+        setTimeout(() => {
+            alertDiv.remove();
+        }, 5000);
+    }
+</script>

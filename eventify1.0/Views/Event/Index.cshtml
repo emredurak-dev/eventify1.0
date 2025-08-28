@@ -1,0 +1,30 @@
+﻿@{
+    ViewBag.Title = "Eventify";
+}
+
+@Html.Partial("_CalendarHeader")
+
+<!-- Main content -->
+<section class="content">
+    <div class="container-fluid">
+        <div class="row">
+            @Html.Partial("_ExternalEvents")
+            @Html.Partial("_Calendar")
+        </div>
+    </div>
+</section>
+
+@Html.Partial("_EventModal")
+
+@section Scripts {
+    <!-- AdminLTE FullCalendar CSS -->
+    <link rel="stylesheet" href="~/Content/AdminLTE-3.1.0/plugins/fullcalendar/main.css">
+
+    @Html.Partial("_Styles")
+
+    <!-- AdminLTE FullCalendar JS -->
+    <script src="~/Content/AdminLTE-3.1.0/plugins/moment/moment.min.js"></script>
+    <script src="~/Content/AdminLTE-3.1.0/plugins/fullcalendar/main.js"></script>
+
+    @Html.Partial("_Scripts")
+}
