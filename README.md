@@ -2,12 +2,6 @@
 
 Minimal calendar and event management (ASP.NET MVC 5 + EF6)
 
-## Features
-- Create, edit, delete events
-- Drag & drop to update date/time
-- FullCalendar-based modern calendar UI
-- AdminLTE 3 and Bootstrap 5 styling
-
 ## Stack
 - ASP.NET MVC 5 (System.Web)
 - Entity Framework 6 (Code First, Migrations)
