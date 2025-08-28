@@ -42,5 +42,8 @@ Minimal calendar and event management (ASP.NET MVC 5 + EF6)
 2) `FullCalendar` fetches events via `GetEvents`
 3) Create/edit/delete via AJAX to JSON endpoints
 
+## Screenshot
+<img width="1919" height="1079" alt="Screenshot 2025-08-28 024527" src="https://github.com/user-attachments/assets/ae0834b7-1959-4e66-8dc6-aa7a22859361" />
+
 ---
 Simple, fast, and extensible event calendar. Enjoy!
